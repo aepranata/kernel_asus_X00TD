@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/ctype.h>
 #include <linux/kprobes.h>
+#include <linux/spinlock.h>
 #include <linux/syscalls.h>
 #include <linux/error-injection.h>
 #include <linux/btf_ids.h>
@@ -23,6 +24,9 @@
 
 #include "trace_probe.h"
 #include "trace.h"
+
+#define CREATE_TRACE_POINTS
+#include "bpf_trace.h"
 
 #define bpf_event_rcu_dereference(p)					\
 	rcu_dereference_protected(p, lockdep_is_held(&bpf_event_mutex))
@@ -505,8 +509,7 @@ fmt_next:
  */
 #define __BPF_TP_EMIT()	__BPF_ARG3_TP()
 #define __BPF_TP(...)							\
-	__trace_printk(0 /* Fake ip */,					\
-		       fmt, ##__VA_ARGS__)
+	bpf_do_trace_printk(fmt, ##__VA_ARGS__)
 
 #define __BPF_ARG1_TP(...)						\
 	((mod[0] == 2 || (mod[0] == 1 && __BITS_PER_LONG == 64))	\
@@ -543,10 +546,15 @@ static const struct bpf_func_proto bpf_trace_printk_proto = {
 const struct bpf_func_proto *bpf_get_trace_printk_proto(void)
 {
 	/*
-	 * this program might be calling bpf_trace_printk,
-	 * so allocate per-cpu printk buffers
+	 * This program might be calling bpf_trace_printk,
+	 * so enable the associated bpf_trace/bpf_trace_printk event.
+	 * Repeat this each time as it is possible a user has
+	 * disabled bpf_trace_printk events.  By loading a program
+	 * calling bpf_trace_printk() however the user has expressed
+	 * the intent to see such events.
 	 */
-	trace_printk_init_buffers();
+	if (trace_set_clr_event("bpf_trace", "bpf_trace_printk", 1))
+		pr_warn_ratelimited("could not enable bpf_trace_printk events");
 
 	return &bpf_trace_printk_proto;
 }
