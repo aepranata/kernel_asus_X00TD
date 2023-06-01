@@ -25,10 +25,6 @@
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
-#ifdef CONFIG_KSU
-#include <linux/ksu.h>
-#endif
-
 const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
@@ -439,8 +435,7 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 EXPORT_SYMBOL(kernel_read);
 
 #ifdef CONFIG_KSU
-extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-			size_t *count_ptr, loff_t **pos);
+extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos);
 #endif
 
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
@@ -448,8 +443,7 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 	ssize_t ret;
 
 #ifdef CONFIG_KSU
-	if (get_ksu_state() > 0)
-		ksu_handle_vfs_read(&file, &buf, &count, &pos);
+	ksu_handle_vfs_read(&file, &buf, &count, &pos);
 #endif
 
 	if (!(file->f_mode & FMODE_READ))
