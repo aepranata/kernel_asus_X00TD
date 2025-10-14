@@ -366,58 +366,6 @@ static void fuse_dentry_release(struct dentry *dentry)
 }
 #endif
 
-/*
- * Get the canonical path. Since we must translate to a path, this must be done
- * in the context of the userspace daemon, however, the userspace daemon cannot
- * look up paths on its own. Instead, we handle the lookup as a special case
- * inside of the write request.
- */
-static void fuse_dentry_canonical_path(const struct path *path,
-				       struct path *canonical_path)
-{
-	struct inode *inode = d_inode(path->dentry);
-	//struct fuse_conn *fc = get_fuse_conn(inode);
-	struct fuse_mount *fm = get_fuse_mount_super(path->mnt->mnt_sb);
-	FUSE_ARGS(args);
-	char *path_name;
-	int err;
-
-
-#ifdef CONFIG_FUSE_BPF
-	struct fuse_err_ret fer;
-
-	fer = fuse_bpf_backing(inode, struct fuse_dummy_io,
-						   fuse_canonical_path_initialize,
-						   fuse_canonical_path_backing,
-						   fuse_canonical_path_finalize, path,
-						   canonical_path);
-	if (fer.ret)
-		return;
-#endif
-
-	path_name = (char *)get_zeroed_page(GFP_KERNEL);
-	if (!path_name)
-		goto default_path;
-
-	args.opcode = FUSE_CANONICAL_PATH;
-	args.nodeid = get_node_id(inode);
-	args.in_numargs = 0;
-	args.out_numargs = 1;
-	args.out_args[0].size = PATH_MAX;
-	args.out_args[0].value = path_name;
-	args.out_argvar = 1;
-	args.canonical_path = canonical_path;
-
-	err = fuse_simple_request(fm, &args);
-	free_page((unsigned long)path_name);
-	if (err > 0)
-		return;
-default_path:
-	canonical_path->dentry = path->dentry;
-	canonical_path->mnt = path->mnt;
-	path_get(canonical_path);
-}
-
 static int fuse_dentry_delete(const struct dentry *dentry)
 {
 	return time_before64(fuse_dentry_time(dentry), get_jiffies_64());
@@ -509,6 +457,67 @@ out_put_fsc:
 	put_fs_context(fsc);
 out:
 	return ERR_PTR(err);
+}
+
+/*
+ * Get the canonical path. Since we must translate to a path, this must be done
+ * in the context of the userspace daemon, however, the userspace daemon cannot
+ * look up paths on its own. Instead, we handle the lookup as a special case
+ * inside of the write request.
+ */
+static void fuse_dentry_canonical_path(const struct path *path,
+				       struct path *canonical_path)
+{
+	struct inode *inode = d_inode(path->dentry);
+	//struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_mount *fm = get_fuse_mount_super(path->mnt->mnt_sb);
+	FUSE_ARGS(args);
+	char *path_name;
+	int err;
+
+#ifdef CONFIG_FUSE_BPF
+	struct fuse_err_ret fer;
+
+	fer = fuse_bpf_backing(inode, struct fuse_dummy_io,
+			       fuse_canonical_path_initialize,
+			       fuse_canonical_path_backing,
+			       fuse_canonical_path_finalize, path,
+			       canonical_path);
+	if (fer.ret) {
+		if (IS_ERR(fer.result))
+			canonical_path->dentry = fer.result;
+		return;
+	}
+#endif
+
+	path_name = (char *)get_zeroed_page(GFP_KERNEL);
+	if (!path_name) {
+		canonical_path->dentry = ERR_PTR(-ENOMEM);
+		return;
+	}
+
+	args.opcode = FUSE_CANONICAL_PATH;
+	args.nodeid = get_node_id(inode);
+	args.in_numargs = 0;
+	args.out_numargs = 1;
+	args.out_args[0].size = PATH_MAX;
+	args.out_args[0].value = path_name;
+	args.canonical_path = canonical_path;
+	args.out_argvar = 1;
+
+	err = fuse_simple_request(fm, &args);
+	free_page((unsigned long)path_name);
+	if (err > 0)
+		return;
+	if (err < 0) {
+		canonical_path->dentry = ERR_PTR(err);
+		return;
+	}
+
+	canonical_path->dentry = path->dentry;
+	canonical_path->mnt = path->mnt;
+	path_get(canonical_path);
+	return;
 }
 
 const struct dentry_operations fuse_dentry_operations = {
@@ -1824,7 +1833,7 @@ void fuse_set_nowrite(struct inode *inode)
 	BUG_ON(fi->writectr < 0);
 	fi->writectr += FUSE_NOWRITE;
 	spin_unlock(&fi->lock);
-	wait_event(fi->page_waitq, fi->writectr == FUSE_NOWRITE);
+	fuse_wait_event(fi->page_waitq, fi->writectr == FUSE_NOWRITE);
 }
 
 /*
