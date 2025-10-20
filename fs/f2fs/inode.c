@@ -784,6 +784,7 @@ retry:
 			set_sbi_flag(sbi, SBI_NEED_FSCK);
 		}
 	}
+
 	sb_end_intwrite(inode->i_sb);
 no_delete:
 	dquot_drop(inode);
