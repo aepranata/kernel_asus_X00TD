@@ -34,9 +34,6 @@
 #define NVTTOUCH_RST_PIN 980
 #define NVTTOUCH_INT_PIN 943
 
-//---Wakeup---
-#define WAKEUP_GESTURE 1
-
 /* Begin ASUS SD660/SD636 COMMON */
 #define NVT_POWER_SOURCE_CUST_EN  1
 #if NVT_POWER_SOURCE_CUST_EN
@@ -96,6 +93,7 @@
 
 //---Customerized func.---
 #define MT_PROTOCOL_B 1
+#define WAKEUP_GESTURE 1
 #if WAKEUP_GESTURE
 extern const uint16_t gesture_key_array[];
 #endif
