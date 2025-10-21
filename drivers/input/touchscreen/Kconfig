@@ -1357,7 +1357,11 @@ source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 source "drivers/input/touchscreen/nt36xxx/Kconfig"
 
-source "drivers/input/touchscreen/NVT_Touch_X01BD/Kconfig"
+source "drivers/input/touchscreen/nt36xxx_ASUS/Kconfig"
+
+source "drivers/input/touchscreen/nt36xxx_X00TD/Kconfig"
+
+source "drivers/input/touchscreen/nt36xxx_X01BD/Kconfig"
 
 config TOUCHSCREEN_HIMAX_CHIPSET
 	bool "Himax touchpanel CHIPSET"
@@ -1370,9 +1374,5 @@ config TOUCHSCREEN_HIMAX_CHIPSET
           If unsure, say N.
 
 source "drivers/input/touchscreen/hxchipset_X01BD/Kconfig"
-
-source "drivers/input/touchscreen/NVT_Touch_X00TD/Kconfig"
-
-source "drivers/input/touchscreen/NVT_Touch_ASUS/Kconfig"
 
 endif
