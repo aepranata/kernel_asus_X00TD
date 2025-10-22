@@ -661,10 +661,6 @@ static inline void tlb_flush_p4d_range(struct mmu_gather *tlb,
 #endif
 #endif
 
-<<<<<<< HEAD
 #endif /* CONFIG_MMU */
-=======
-#define tlb_migrate_finish(mm) ((void)0)
->>>>>>> 33e5ff272baa6 (treewide: Make macros no-op using `((void)0)`)
 
 #endif /* _ASM_GENERIC__TLB_H */
