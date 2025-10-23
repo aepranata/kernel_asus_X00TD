@@ -475,26 +475,22 @@ static void fuse_dentry_canonical_path(const struct path *path,
 	char *path_name;
 	int err;
 
+
 #ifdef CONFIG_FUSE_BPF
 	struct fuse_err_ret fer;
 
 	fer = fuse_bpf_backing(inode, struct fuse_dummy_io,
-			       fuse_canonical_path_initialize,
-			       fuse_canonical_path_backing,
-			       fuse_canonical_path_finalize, path,
-			       canonical_path);
-	if (fer.ret) {
-		if (IS_ERR(fer.result))
-			canonical_path->dentry = fer.result;
+						   fuse_canonical_path_initialize,
+						   fuse_canonical_path_backing,
+						   fuse_canonical_path_finalize, path,
+						   canonical_path);
+	if (fer.ret)
 		return;
-	}
 #endif
 
 	path_name = (char *)get_zeroed_page(GFP_KERNEL);
-	if (!path_name) {
-		canonical_path->dentry = ERR_PTR(-ENOMEM);
-		return;
-	}
+	if (!path_name)
+		goto default_path;
 
 	args.opcode = FUSE_CANONICAL_PATH;
 	args.nodeid = get_node_id(inode);
@@ -502,22 +498,17 @@ static void fuse_dentry_canonical_path(const struct path *path,
 	args.out_numargs = 1;
 	args.out_args[0].size = PATH_MAX;
 	args.out_args[0].value = path_name;
-	args.canonical_path = canonical_path;
 	args.out_argvar = 1;
+	args.canonical_path = canonical_path;
 
 	err = fuse_simple_request(fm, &args);
 	free_page((unsigned long)path_name);
 	if (err > 0)
 		return;
-	if (err < 0) {
-		canonical_path->dentry = ERR_PTR(err);
-		return;
-	}
-
+default_path:
 	canonical_path->dentry = path->dentry;
 	canonical_path->mnt = path->mnt;
 	path_get(canonical_path);
-	return;
 }
 
 const struct dentry_operations fuse_dentry_operations = {
@@ -536,6 +527,7 @@ const struct dentry_operations fuse_root_dentry_operations = {
 	.d_init		= fuse_dentry_init,
 	.d_release	= fuse_dentry_release,
 #endif
+	.d_canonical_path = fuse_dentry_canonical_path,
 };
 
 int fuse_valid_type(int m)
