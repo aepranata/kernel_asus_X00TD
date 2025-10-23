@@ -33,7 +33,6 @@
 #include <linux/pid_namespace.h>
 #include <linux/refcount.h>
 #include <linux/user_namespace.h>
-#include <linux/freezer.h>
 #include <linux/statfs.h>
 
 #define FUSE_SUPER_MAGIC 0x65735546
@@ -460,8 +459,10 @@ struct fuse_req {
 	/** Used to wake up the task waiting for completion of request*/
 	wait_queue_head_t waitq;
 
+#if IS_ENABLED(CONFIG_VIRTIO_FS)
 	/** virtio-fs's physically contiguous buffer for in and out args */
 	void *argbuf;
+#endif
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
@@ -953,16 +954,6 @@ static inline u64 get_node_id(struct inode *inode)
 	return get_fuse_inode(inode)->nodeid;
 }
 
-static inline int invalid_nodeid(u64 nodeid)
-{
-	return !nodeid || nodeid == FUSE_ROOT_ID;
-}
-
-static inline u64 fuse_get_attr_version(struct fuse_conn *fc)
-{
-	return atomic64_read(&fc->attr_version);
-}
-
 static inline bool fuse_stale_inode(const struct inode *inode, int generation,
 				    struct fuse_attr *attr)
 {
@@ -978,6 +969,16 @@ static inline void fuse_make_bad(struct inode *inode)
 static inline bool fuse_is_bad(struct inode *inode)
 {
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
+}
+
+static inline int invalid_nodeid(u64 nodeid)
+{
+	return !nodeid || nodeid == FUSE_ROOT_ID;
+}
+
+static inline u64 fuse_get_attr_version(struct fuse_conn *fc)
+{
+	return atomic64_read(&fc->attr_version);
 }
 
 /** Device operations */
@@ -1346,50 +1347,6 @@ void fuse_dax_inode_init(struct inode *inode);
 void fuse_dax_inode_cleanup(struct inode *inode);
 bool fuse_dax_check_alignment(struct fuse_conn *fc, unsigned int map_alignment);
 void fuse_dax_cancel_work(struct fuse_conn *fc);
-
-#ifdef CONFIG_FREEZER
-static inline void fuse_freezer_do_not_count(void)
-{
-	current->flags |= PF_FREEZER_SKIP;
-}
-
-static inline void fuse_freezer_count(void)
-{
-	current->flags &= ~PF_FREEZER_SKIP;
-}
-#else /* !CONFIG_FREEZER */
-static inline void fuse_freezer_do_not_count(void) {}
-static inline void fuse_freezer_count(void) {}
-#endif
-
-#define fuse_wait_event(wq, condition)						\
-({										\
-	fuse_freezer_do_not_count();						\
-	wait_event(wq, condition);						\
-	fuse_freezer_count();							\
-})
-
-#define fuse_wait_event_killable(wq, condition)					\
-({										\
-	int __ret = 0;								\
-										\
-	fuse_freezer_do_not_count();						\
-	__ret = wait_event_killable(wq, condition);				\
-	fuse_freezer_count();							\
-										\
-	__ret;									\
-})
-
-#define fuse_wait_event_killable_exclusive(wq, condition)			\
-({										\
-	int __ret = 0;								\
-										\
-	fuse_freezer_do_not_count();						\
-	__ret = wait_event_killable_exclusive(wq, condition);			\
-	fuse_freezer_count();							\
-										\
-	__ret;									\
-})
 
 /* backing.c */
 

@@ -249,9 +249,9 @@ retry:
 			if (!IS_ERR(inode)) {
 				struct fuse_inode *fi = get_fuse_inode(inode);
 
-				spin_lock(&fi->lock);
+				spin_lock(&fc->lock);
 				fi->nlookup--;
-				spin_unlock(&fi->lock);
+				spin_unlock(&fc->lock);
 			}
 			return PTR_ERR(dentry);
 		}
