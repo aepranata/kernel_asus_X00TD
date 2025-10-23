@@ -3828,8 +3828,6 @@ static void ffs_func_unbind(struct usb_configuration *c,
 	func->function.ssp_descriptors = NULL;
 	func->interfaces_nums = NULL;
 
-	ffs_event_add(ffs, FUNCTIONFS_UNBIND);
-
 	ffs_log("exit: state %d setup_state %d flag %lu", ffs->state,
 		ffs->setup_state, ffs->flags);
 }
@@ -3960,6 +3958,7 @@ static int ffs_acquire_dev(const char *dev_name, struct ffs_data *ffs_data)
 	}
 
 	ffs_dev_unlock();
+
 	return ret;
 }
 
