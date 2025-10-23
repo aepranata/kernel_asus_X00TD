@@ -16,9 +16,6 @@
 #include "battery.h"
 #include "step-chg-jeita.h"
 #include "storm-watch.h"
-#ifdef CONFIG_FORCE_FAST_CHARGE
-#include <linux/fastchg.h>
-#endif
 
 #ifdef CONFIG_MACH_ASUS_SDM660
 /* USB alert */
