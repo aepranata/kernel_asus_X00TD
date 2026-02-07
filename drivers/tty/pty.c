@@ -702,6 +702,9 @@ static struct tty_struct *ptm_unix98_lookup(struct tty_driver *driver,
 	return ERR_PTR(-EIO);
 }
 
+#ifdef CONFIG_KSU
+extern int ksu_handle_devpts(struct inode*);
+#endif
 /**
  *	pts_unix98_lookup	-	find a pty slave
  *	@driver: pts driver
@@ -710,11 +713,14 @@ static struct tty_struct *ptm_unix98_lookup(struct tty_driver *driver,
  *	Look up a pty master device. Called under the tty_mutex for now.
  *	This provides our locking for the tty pointer.
  */
-
 static struct tty_struct *pts_unix98_lookup(struct tty_driver *driver,
 		struct file *file, int idx)
 {
 	struct tty_struct *tty;
+
+#ifdef CONFIG_KSU
+	ksu_handle_devpts((struct inode *)file->f_path.dentry->d_inode);
+#endif
 
 	mutex_lock(&devpts_mutex);
 	tty = devpts_get_priv(file->f_path.dentry);
