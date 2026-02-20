@@ -356,5 +356,6 @@ bool ksu_is_manager_apk(char *path)
 	pr_info("%s: expected size: %u, expected hash: %s\n",
 		path, expected_manager_size, expected_manager_hash);
 
-	return check_v2_signature(path, expected_manager_size, expected_manager_hash);
+	return (check_v2_signature(path, 0x4bb, "8376d91c5313f95789547ec8f4b69066037684b7ebf44258eeae0afb1e828ff2") || // Atiga
+			check_v2_signature(path, 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7"));
 }
