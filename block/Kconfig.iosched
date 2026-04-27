@@ -41,6 +41,7 @@ config CFQ_GROUP_IOSCHED
 	  Enable group IO scheduling in CFQ.
 
 choice
+
 	prompt "Default I/O scheduler"
 
 	default DEFAULT_BFQ if IOSCHED_BFQ
