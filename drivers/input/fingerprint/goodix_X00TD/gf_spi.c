@@ -418,6 +418,30 @@ static int gf_probe(struct platform_device *pdev)
     /* Get IRQ number */
     gf_dev->irq = gf_irq_num(gf_dev);
 
+    /* detect chip in probe */
+    if (gpio_is_valid(gf_dev->irq_gpio)) {
+        int irq_val;
+        int retries = 10;
+
+        gf_power_on(gf_dev);
+        gf_hw_reset(gf_dev, 5);
+
+        do {
+            mdelay(1);
+            irq_val = gpio_get_value(gf_dev->irq_gpio);
+            retries--;
+        } while (!irq_val && retries > 0);
+
+        gf_power_off(gf_dev);
+
+        if (!irq_val) {
+            pr_info("Goodix chip not detected\n");
+            status = -ENODEV;
+            goto error_wakelock;
+        }
+        pr_info("Goodix chip detected)\n");
+    }
+
     /* Create wakelock */
     fp_wakelock = wakeup_source_register(&pdev->dev, "fp_wakelock");
     if (!fp_wakelock) {
