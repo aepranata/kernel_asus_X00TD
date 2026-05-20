@@ -800,7 +800,20 @@ madvise_behavior_valid(int behavior)
  *  -EBADF  - map exists, but area maps something that isn't a file.
  *  -EAGAIN - a kernel resource was temporarily unavailable.
  */
-SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
+/*
+ * [4.19 backport for DAMON] Extracted from the body of
+ * SYSCALL_DEFINE3(madvise, ...) below, unchanged except every use of
+ * current->mm is replaced by the explicit 'mm' parameter, and the
+ * untagged_addr() call (which is about detagging a *raw syscall argument*
+ * from userspace, not relevant when called internally with an
+ * already-resolved kernel-side address such as a damon_region's start)
+ * is dropped, matching how mainline's own do_madvise() omits it too.
+ *
+ * See the comment on this function's declaration in linux/mman.h for the
+ * MADV_COLD/MADV_PAGEOUT limitation.
+ */
+long do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in,
+		int behavior)
 {
 	unsigned long end, tmp;
 	struct vm_area_struct *vma, *prev;
@@ -809,8 +822,6 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 	int write;
 	size_t len;
 	struct blk_plug plug;
-
-	start = untagged_addr(start);
 
 	if (!madvise_behavior_valid(behavior))
 		return error;
@@ -838,10 +849,10 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 
 	write = madvise_need_mmap_write(behavior);
 	if (write) {
-		if (mmap_write_lock_killable(current->mm))
+		if (mmap_write_lock_killable(mm))
 			return -EINTR;
 	} else {
-		mmap_read_lock(current->mm);
+		mmap_read_lock(mm);
 	}
 
 	/*
@@ -849,7 +860,7 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 	 * ranges, just ignore them, but return -ENOMEM at the end.
 	 * - different from the way of handling in mlock etc.
 	 */
-	vma = find_vma_prev(current->mm, start, &prev);
+	vma = find_vma_prev(mm, start, &prev);
 	if (vma && start > vma->vm_start)
 		prev = vma;
 
@@ -886,14 +897,21 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 		if (prev)
 			vma = prev->vm_next;
 		else	/* madvise_remove dropped mmap_sem */
-			vma = find_vma(current->mm, start);
+			vma = find_vma(mm, start);
 	}
 out:
 	blk_finish_plug(&plug);
 	if (write)
-		mmap_write_unlock(current->mm);
+		mmap_write_unlock(mm);
 	else
-		mmap_read_unlock(current->mm);
+		mmap_read_unlock(mm);
 
 	return error;
+}
+
+SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
+{
+	start = untagged_addr(start);
+
+	return do_madvise(current->mm, start, len_in, behavior);
 }

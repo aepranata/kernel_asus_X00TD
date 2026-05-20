@@ -135,4 +135,25 @@ calc_vm_flag_bits(unsigned long flags)
 }
 
 unsigned long vm_commit_limit(void);
+
+/*
+ * [4.19 backport for DAMON] do_madvise() extracted from the madvise(2)
+ * syscall body in mm/madvise.c, parameterized on an explicit mm_struct
+ * instead of always using current->mm. This is what lets DAMON issue
+ * madvise-based DAMOS actions (DAMOS_WILLNEED, DAMOS_HUGEPAGE,
+ * DAMOS_NOHUGEPAGE) against a monitored target process's mm from kernel
+ * context, mirroring the do_madvise() mainline added (~5.19) for the same
+ * purpose.
+ *
+ * NOTE: MADV_COLD and MADV_PAGEOUT (mainline 5.4+ additions for proactive
+ * reclaim) are NOT implemented anywhere in this kernel's mm/madvise.c -
+ * confirmed by inspection, not just the missing macros. Backporting those
+ * would mean porting mainline's madvise_cold_or_pageout_pte_range() and
+ * its vmscan.c-level reclaim helpers, which is a materially bigger task
+ * than this do_madvise() extraction and is NOT done here. DAMOS_COLD and
+ * DAMOS_PAGEOUT remain no-ops via DAMON until/unless that separate work is
+ * done.
+ */
+long do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in,
+		int behavior);
 #endif /* _LINUX_MMAN_H */
