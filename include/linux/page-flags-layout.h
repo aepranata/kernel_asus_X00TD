@@ -95,6 +95,14 @@
 #define KASAN_TAG_WIDTH 0
 #endif
 
+#ifdef CONFIG_LRU_GEN
+#define LRU_GEN_WIDTH		3
+#define LRU_USAGE_WIDTH		2
+#else
+#define LRU_GEN_WIDTH		0
+#define LRU_USAGE_WIDTH		0
+#endif
+
 #if SECTIONS_WIDTH+ZONES_WIDTH+NODES_WIDTH+LAST_CPUPID_WIDTH+KASAN_TAG_WIDTH+ \
 	LRU_GEN_WIDTH+LRU_REFS_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
 #error "Not enough bits in page flags"
