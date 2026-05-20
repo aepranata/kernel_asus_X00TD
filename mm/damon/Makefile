@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: GPL-2.0
 #
-# [4.19 backport] Stage 6: reclaim.o / lru_sort.o / modules-common.o added
-# (ready-made DAMOS modules). Only fix needed: <linux/kstrtox.h> doesn't
-# exist in this kernel, swapped for <linux/kernel.h> (where kstrtobool()/
-# kstrtoul() etc. are still declared here). Both modules build on APIs
-# already proven working in earlier stages (damon_new_scheme(),
-# damos_new_quota_goal(), damon_set_region_biggest_system_ram_default()
-# from core.c; DAMOS_PAGEOUT/DAMOS_LRU_PRIO from paddr.c).
+# [4.19 backport - FINAL wiring]
 #
-# DAMON_LRU_SORT's cold-side action (DAMOS_LRU_DEPRIO) is a no-op on this
-# device - deactivate_page() isn't available here (see paddr.c). Its
-# hot-side (DAMOS_LRU_PRIO) does work.
+# Now matches mainline's structure exactly. 'obj-y := core.o'
+# (unconditional within this sub-Makefile, not obj-$(CONFIG_DAMON)) is
+# correct and matches mainline: this mm/damon/ subdirectory is only ever
+# entered in the first place via the parent mm/Makefile's own
+# 'obj-$(CONFIG_DAMON) += damon/' line, so core.o only actually gets built
+# when CONFIG_DAMON=y regardless of using obj-y here.
 #
-# All DAMON object files are still temporarily built together under
-# CONFIG_DAMON itself rather than mainline's separate DAMON_VADDR /
-# DAMON_PADDR / DAMON_SYSFS Kconfig entries - see the earlier stage
-# comments in this file. reclaim.o/lru_sort.o are correctly gated on
-# their own DAMON_RECLAIM/DAMON_LRU_SORT options though, since those were
-# added properly in this stage.
+# ops-common.o is listed under both DAMON_VADDR and DAMON_PADDR, and
+# modules-common.o under both DAMON_RECLAIM and DAMON_LRU_SORT - this is
+# mainline's own pattern (not a mistake): if either config needs the
+# object, list it there; Kbuild builds each object once regardless of how
+# many obj-$(CONFIG_X) lines reference it.
 
-obj-$(CONFIG_DAMON)		:= core.o ops-common.o vaddr.o paddr.o \
-				   sysfs.o sysfs-common.o sysfs-schemes.o
-obj-$(CONFIG_DAMON_RECLAIM)	+= reclaim.o modules-common.o
-obj-$(CONFIG_DAMON_LRU_SORT)	+= lru_sort.o modules-common.o
+obj-y				:= core.o
+obj-$(CONFIG_DAMON_VADDR)	+= ops-common.o vaddr.o
+obj-$(CONFIG_DAMON_PADDR)	+= ops-common.o paddr.o
+obj-$(CONFIG_DAMON_SYSFS)	+= sysfs-common.o sysfs-schemes.o sysfs.o
+obj-$(CONFIG_DAMON_RECLAIM)	+= modules-common.o reclaim.o
+obj-$(CONFIG_DAMON_LRU_SORT)	+= modules-common.o lru_sort.o

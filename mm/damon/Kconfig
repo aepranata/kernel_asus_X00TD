@@ -1,11 +1,39 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# [4.19 backport] Trimmed for this stage of the port: only the core
-# framework (config DAMON) is wired up. DAMON_VADDR / DAMON_PADDR /
-# DAMON_SYSFS / DAMON_RECLAIM / DAMON_LRU_SORT / DAMON_KUNIT_TEST entries
-# will be appended here as their respective .c files get ported, since
-# each one depends on infrastructure (folio API, mm_walk_ops, page_idle
-# wiring) that hasn't been ported yet.
+# [4.19 backport - FINAL Kconfig wiring]
+#
+# This now matches mainline's module structure (DAMON / DAMON_VADDR /
+# DAMON_PADDR / DAMON_SYSFS / DAMON_RECLAIM / DAMON_LRU_SORT as separate,
+# properly-gated options) instead of the earlier staging approach where
+# everything was bundled under plain CONFIG_DAMON. Two deviations from
+# mainline, both deliberate:
+#
+# 1. 'select PAGE_IDLE_FLAG' - mainline's DAMON_VADDR/DAMON_PADDR select
+#    this symbol, which doesn't exist in this kernel's mm/Kconfig at all
+#    (confirmed - only IDLE_PAGE_TRACKING exists here; mainline later
+#    split the underlying page-flag bit out from the user-visible
+#    IDLE_PAGE_TRACKING feature into its own lower-level PAGE_IDLE_FLAG
+#    symbol that both select, but this 4.19 tree predates that split).
+#    'select IDLE_PAGE_TRACKING' instead, since that's what actually
+#    gates the PG_young/PG_idle page flag bits here (see
+#    include/linux/page-flags.h: '#if defined(CONFIG_IDLE_PAGE_TRACKING)
+#    && defined(CONFIG_64BIT)'). Without this, ops-common.c/vaddr.c/
+#    paddr.c's page_idle.h wrapper calls (set_page_idle(), page_is_idle(),
+#    etc.) silently compile down to no-op stubs that always report "not
+#    idle" - DAMON would build and run, but every region would look
+#    permanently hot, since young/idle tracking would never actually
+#    happen. This was flagged as an open item all the way back in stage 1;
+#    this select() is what actually closes it.
+#
+# 2. No DAMON_KUNIT_TEST / DAMON_VADDR_KUNIT_TEST / DAMON_SYSFS_KUNIT_TEST
+#    entries. CONFIG_KUNIT doesn't appear anywhere in this kernel's
+#    mm/Kconfig or in X00TD_defconfig - unconfirmed whether the KUnit
+#    framework exists in this tree at all (it's a mainline ~5.5+
+#    addition). The kunit test source files copied in earlier stages
+#    (tests/core-kunit.h etc.) are self-guarded by their own
+#    '#ifdef CONFIG_DAMON_*_KUNIT_TEST' internally, so omitting these
+#    Kconfig entries just means that guard is never satisfied - those
+#    files compile down to nothing, no build impact either way.
 
 menu "Data Access Monitoring"
 
@@ -19,18 +47,49 @@ config DAMON
 	  See https://www.kernel.org/doc/html/latest/mm/damon/index.html for
 	  more information.
 
-#
-# [4.19 backport] Stage 6: DAMON_RECLAIM / DAMON_LRU_SORT added.
-# Mainline gates both behind 'depends on DAMON_PADDR', which doesn't
-# exist as a separate Kconfig entry yet in this backport (core/vaddr/
-# paddr/sysfs are all still built under plain CONFIG_DAMON - see
-# mm/damon/Makefile). Depending on DAMON directly here instead; proper
-# 'depends on DAMON_PADDR' gets restored once the Kconfig module split
-# happens in the final cleanup stage.
-#
+config DAMON_VADDR
+	bool "Data access monitoring operations for virtual address spaces"
+	depends on DAMON && MMU
+	select IDLE_PAGE_TRACKING
+	default DAMON
+	help
+	  This builds the default data access monitoring operations for DAMON
+	  that work for virtual address spaces.
+
+	  [4.19 backport] Hugetlb entries are not supported (this device's
+	  defconfig has CONFIG_HUGETLBFS unset). DAMOS_COLD/DAMOS_PAGEOUT via
+	  this vaddr path are no-ops (no MADV_COLD/MADV_PAGEOUT support in
+	  this kernel's mm/madvise.c). DAMOS_WILLNEED/DAMOS_HUGEPAGE/
+	  DAMOS_NOHUGEPAGE work (via a small do_madvise() extraction patch
+	  applied to mm/madvise.c - see madvise.c.patch).
+
+config DAMON_PADDR
+	bool "Data access monitoring operations for the physical address space"
+	depends on DAMON && MMU
+	select IDLE_PAGE_TRACKING
+	default DAMON
+	help
+	  This builds the default data access monitoring operations for DAMON
+	  that works for the physical address space.
+
+	  [4.19 backport] DAMOS_PAGEOUT is fully functional here (via this
+	  kernel's reclaim_pages_from_list(), gated on CONFIG_PROCESS_RECLAIM
+	  - enable that too if not already on). DAMOS_LRU_DEPRIO is a no-op
+	  (no deactivate_page() in this kernel). DAMOS_MIGRATE_HOT/COLD is
+	  fully wired up but will never actually move anything on this
+	  device's single-NUMA-node hardware.
+
+config DAMON_SYSFS
+	bool "DAMON sysfs interface"
+	depends on DAMON && SYSFS
+	default DAMON
+	help
+	  This builds the sysfs interface for DAMON.  The user space can use
+	  the interface for arbitrary data access monitoring.
+
 config DAMON_RECLAIM
 	bool "Build DAMON-based reclaim (DAMON_RECLAIM)"
-	depends on DAMON
+	depends on DAMON_PADDR
 	help
 	  This builds the DAMON-based reclamation subsystem.  It finds pages
 	  that not accessed for a long time (cold) using DAMON and reclaim
@@ -40,18 +99,20 @@ config DAMON_RECLAIM
 	  reclamation under light memory pressure, while the traditional page
 	  scanning-based reclamation is used for heavy pressure.
 
+	  [4.19 backport] Requires CONFIG_PROCESS_RECLAIM=y (see DAMON_PADDR's
+	  help text) for its DAMOS_PAGEOUT action to actually reclaim memory.
+
 config DAMON_LRU_SORT
 	bool "Build DAMON-based LRU-lists sorting (DAMON_LRU_SORT)"
-	depends on DAMON
+	depends on DAMON_PADDR
 	help
 	  This builds the DAMON-based LRU-lists sorting subsystem. It tries to
 	  protect frequently accessed (hot) pages while rarely accessed (cold)
 	  pages reclaimed first under memory pressure.
 
-	  NOTE for this backport: the "protect hot pages" half works on this
-	  device (DAMOS_LRU_PRIO, via mark_page_accessed()). The "deprioritize
-	  cold pages" half does not (DAMOS_LRU_DEPRIO needs deactivate_page(),
-	  which this kernel doesn't have - see mm/damon/paddr.c). Enabling
-	  this gets you half of its intended effect, not the full picture.
+	  [4.19 backport] Only half-functional here: the "protect hot pages"
+	  half works (DAMOS_LRU_PRIO, via mark_page_accessed()). The
+	  "deprioritize cold pages" half does not (DAMOS_LRU_DEPRIO needs
+	  deactivate_page(), which this kernel doesn't have).
 
 endmenu
