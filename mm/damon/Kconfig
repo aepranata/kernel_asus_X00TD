@@ -19,4 +19,39 @@ config DAMON
 	  See https://www.kernel.org/doc/html/latest/mm/damon/index.html for
 	  more information.
 
+#
+# [4.19 backport] Stage 6: DAMON_RECLAIM / DAMON_LRU_SORT added.
+# Mainline gates both behind 'depends on DAMON_PADDR', which doesn't
+# exist as a separate Kconfig entry yet in this backport (core/vaddr/
+# paddr/sysfs are all still built under plain CONFIG_DAMON - see
+# mm/damon/Makefile). Depending on DAMON directly here instead; proper
+# 'depends on DAMON_PADDR' gets restored once the Kconfig module split
+# happens in the final cleanup stage.
+#
+config DAMON_RECLAIM
+	bool "Build DAMON-based reclaim (DAMON_RECLAIM)"
+	depends on DAMON
+	help
+	  This builds the DAMON-based reclamation subsystem.  It finds pages
+	  that not accessed for a long time (cold) using DAMON and reclaim
+	  those.
+
+	  This is suggested to be used as a proactive and lightweight
+	  reclamation under light memory pressure, while the traditional page
+	  scanning-based reclamation is used for heavy pressure.
+
+config DAMON_LRU_SORT
+	bool "Build DAMON-based LRU-lists sorting (DAMON_LRU_SORT)"
+	depends on DAMON
+	help
+	  This builds the DAMON-based LRU-lists sorting subsystem. It tries to
+	  protect frequently accessed (hot) pages while rarely accessed (cold)
+	  pages reclaimed first under memory pressure.
+
+	  NOTE for this backport: the "protect hot pages" half works on this
+	  device (DAMOS_LRU_PRIO, via mark_page_accessed()). The "deprioritize
+	  cold pages" half does not (DAMOS_LRU_DEPRIO needs deactivate_page(),
+	  which this kernel doesn't have - see mm/damon/paddr.c). Enabling
+	  this gets you half of its intended effect, not the full picture.
+
 endmenu
